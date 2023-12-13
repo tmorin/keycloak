@@ -129,6 +129,34 @@ const Fields = ({ readOnly }: DescriptorSettingsProps) => {
         />
       </FormGroup>
       <FormGroup
+        label={t("artifactResolutionServiceUrl")}
+        labelIcon={
+          <HelpItem
+            helpText={t("artifactResolutionServiceUrlHelp")}
+            fieldLabelId="artifactResolutionServiceUrl"
+          />
+        }
+        fieldId="kc-artifact-resolution-service-url"
+        validated={
+          errors.config?.artifactResolutionServiceUrl
+            ? ValidatedOptions.error
+            : ValidatedOptions.default
+        }
+      >
+        <KeycloakTextInput
+          type="url"
+          data-testid="artifact-resolution-service-url"
+          id="kc-artifact-resolution-service-url"
+          validated={
+            errors.config?.artifactResolutionServiceUrl
+              ? ValidatedOptions.error
+              : ValidatedOptions.default
+          }
+          isReadOnly={readOnly}
+          {...register("config.artifactResolutionServiceUrl", { required: false })}
+        />
+      </FormGroup>
+      <FormGroup
         label={t("singleLogoutServiceUrl")}
         labelIcon={
           <HelpItem
@@ -313,6 +341,12 @@ const Fields = ({ readOnly }: DescriptorSettingsProps) => {
       <SwitchField
         field="config.allowCreate"
         label="allowCreate"
+        isReadOnly={readOnly}
+      />
+
+      <SwitchField
+        field="config.artifactBindingResponse"
+        label="httpArtifactBindingResponse"
         isReadOnly={readOnly}
       />
 

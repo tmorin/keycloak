@@ -16,13 +16,14 @@
  */
 package org.keycloak.broker.saml;
 
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriInfo;
+import jakarta.xml.soap.SOAPException;
+import jakarta.xml.soap.SOAPMessage;
 import org.jboss.logging.Logger;
-import org.keycloak.broker.provider.AbstractIdentityProvider;
-import org.keycloak.broker.provider.AuthenticationRequest;
-import org.keycloak.broker.provider.BrokeredIdentityContext;
-import org.keycloak.broker.provider.IdentityBrokerException;
-import org.keycloak.broker.provider.IdentityProviderDataMarshaller;
-import org.keycloak.broker.provider.IdentityProviderMapper;
+import org.keycloak.broker.provider.*;
 import org.keycloak.broker.provider.util.SimpleHttp;
 import org.keycloak.common.util.PemUtils;
 import org.keycloak.crypto.Algorithm;
@@ -31,72 +32,51 @@ import org.keycloak.dom.saml.v2.assertion.AssertionType;
 import org.keycloak.dom.saml.v2.assertion.AuthnStatementType;
 import org.keycloak.dom.saml.v2.assertion.NameIDType;
 import org.keycloak.dom.saml.v2.assertion.SubjectType;
-import org.keycloak.dom.saml.v2.metadata.AttributeConsumingServiceType;
-import org.keycloak.dom.saml.v2.metadata.EntityDescriptorType;
-import org.keycloak.dom.saml.v2.metadata.KeyDescriptorType;
-import org.keycloak.dom.saml.v2.metadata.KeyTypes;
-import org.keycloak.dom.saml.v2.metadata.LocalizedNameType;
-import org.keycloak.dom.saml.v2.protocol.AuthnRequestType;
-import org.keycloak.dom.saml.v2.protocol.LogoutRequestType;
-import org.keycloak.dom.saml.v2.protocol.ResponseType;
+import org.keycloak.dom.saml.v2.metadata.*;
+import org.keycloak.dom.saml.v2.protocol.*;
 import org.keycloak.events.EventBuilder;
-import org.keycloak.models.FederatedIdentityModel;
-import org.keycloak.models.IdentityProviderMapperModel;
-import org.keycloak.models.KeyManager;
-import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.RealmModel;
-import org.keycloak.models.UserSessionModel;
+import org.keycloak.models.*;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
+import org.keycloak.protocol.saml.*;
 import org.keycloak.protocol.saml.JaxrsSAML2BindingBuilder;
 import org.keycloak.protocol.saml.SamlProtocol;
 import org.keycloak.protocol.saml.SamlService;
 import org.keycloak.protocol.saml.SamlSessionUtils;
 import org.keycloak.protocol.saml.mappers.SamlMetadataDescriptorUpdater;
 import org.keycloak.protocol.saml.preprocessor.SamlAuthenticationPreprocessor;
-import org.keycloak.protocol.saml.SAMLEncryptionAlgorithms;
-import org.keycloak.saml.SAML2AuthnRequestBuilder;
-import org.keycloak.saml.SAML2LogoutRequestBuilder;
-import org.keycloak.saml.SAML2NameIDPolicyBuilder;
-import org.keycloak.saml.SAML2RequestedAuthnContextBuilder;
-import org.keycloak.saml.SPMetadataDescriptor;
+import org.keycloak.protocol.saml.profile.util.Soap;
+import org.keycloak.saml.*;
 import org.keycloak.saml.SamlProtocolExtensionsAwareBuilder.NodeGenerator;
-import org.keycloak.saml.SignatureAlgorithm;
 import org.keycloak.saml.common.constants.GeneralConstants;
 import org.keycloak.saml.common.constants.JBossSAMLURIConstants;
 import org.keycloak.saml.common.exceptions.ConfigurationException;
+import org.keycloak.saml.common.exceptions.ParsingException;
+import org.keycloak.saml.common.exceptions.ProcessingException;
 import org.keycloak.saml.common.util.DocumentUtil;
 import org.keycloak.saml.common.util.StaxUtil;
 import org.keycloak.saml.processing.api.saml.v2.request.SAML2Request;
+import org.keycloak.saml.processing.api.saml.v2.response.SAML2Response;
 import org.keycloak.saml.processing.api.saml.v2.sig.SAML2Signature;
+import org.keycloak.saml.processing.core.saml.v2.common.SAMLDocumentHolder;
 import org.keycloak.saml.processing.core.saml.v2.writers.SAMLMetadataWriter;
 import org.keycloak.saml.processing.core.util.KeycloakKeySamlExtensionGenerator;
 import org.keycloak.saml.validators.DestinationValidator;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.util.JsonSerialization;
-
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriBuilder;
-import jakarta.ws.rs.core.UriInfo;
 import javax.xml.crypto.dsig.CanonicalizationMethod;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.stream.XMLStreamWriter;
-
+import java.io.IOException;
 import java.io.StringWriter;
 import java.net.URI;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -106,6 +86,7 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
     protected static final Logger logger = Logger.getLogger(SAMLIdentityProvider.class);
 
     private final DestinationValidator destinationValidator;
+
     public SAMLIdentityProvider(KeycloakSession session, SAMLIdentityProviderConfig config, DestinationValidator destinationValidator) {
         super(session, config);
         this.destinationValidator = destinationValidator;
@@ -126,20 +107,22 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
             String nameIDPolicyFormat = getConfig().getNameIDPolicyFormat();
 
             if (nameIDPolicyFormat == null) {
-                nameIDPolicyFormat =  JBossSAMLURIConstants.NAMEID_FORMAT_PERSISTENT.get();
+                nameIDPolicyFormat = JBossSAMLURIConstants.NAMEID_FORMAT_PERSISTENT.get();
             }
 
             String protocolBinding = JBossSAMLURIConstants.SAML_HTTP_REDIRECT_BINDING.get();
 
             String assertionConsumerServiceUrl = request.getRedirectUri();
 
-            if (getConfig().isPostBindingResponse()) {
+            if (getConfig().isArtifactBindingResponse()) {
+                protocolBinding = JBossSAMLURIConstants.SAML_HTTP_ARTIFACT_BINDING.get();
+            } else if (getConfig().isPostBindingResponse()) {
                 protocolBinding = JBossSAMLURIConstants.SAML_HTTP_POST_BINDING.get();
             }
 
             SAML2RequestedAuthnContextBuilder requestedAuthnContext =
-                new SAML2RequestedAuthnContextBuilder()
-                    .setComparison(getConfig().getAuthnContextComparisonType());
+                    new SAML2RequestedAuthnContextBuilder()
+                            .setComparison(getConfig().getAuthnContextComparisonType());
 
             for (String authnContextClassRef : getAuthnContextClassRefUris())
                 requestedAuthnContext.addAuthnContextClassRef(authnContextClassRef);
@@ -177,13 +160,13 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
                 binding.signWith(keyName, keys.getPrivateKey(), keys.getPublicKey(), keys.getCertificate())
                         .signatureAlgorithm(getSignatureAlgorithm())
                         .signDocument();
-                if (! postBinding && getConfig().isAddExtensionsElementWithKeyInfo()) {    // Only include extension if REDIRECT binding and signing whole SAML protocol message
+                if (!postBinding && getConfig().isAddExtensionsElementWithKeyInfo()) {    // Only include extension if REDIRECT binding and signing whole SAML protocol message
                     authnRequestBuilder.addExtension(new KeycloakKeySamlExtensionGenerator(keyName));
                 }
             }
 
             AuthnRequestType authnRequest = authnRequestBuilder.createAuthnRequest();
-            for(Iterator<SamlAuthenticationPreprocessor> it = SamlSessionUtils.getSamlAuthenticationPreprocessorIterator(session); it.hasNext(); ) {
+            for (Iterator<SamlAuthenticationPreprocessor> it = SamlSessionUtils.getSamlAuthenticationPreprocessorIterator(session); it.hasNext(); ) {
                 authnRequest = it.next().beforeSendingLoginRequest(authnRequest, request.getAuthenticationSession());
             }
 
@@ -240,16 +223,16 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
     }
 
     @Override
-    public void authenticationFinished(AuthenticationSessionModel authSession, BrokeredIdentityContext context)  {
-        ResponseType responseType = (ResponseType)context.getContextData().get(SAMLEndpoint.SAML_LOGIN_RESPONSE);
-        AssertionType assertion = (AssertionType)context.getContextData().get(SAMLEndpoint.SAML_ASSERTION);
+    public void authenticationFinished(AuthenticationSessionModel authSession, BrokeredIdentityContext context) {
+        ResponseType responseType = (ResponseType) context.getContextData().get(SAMLEndpoint.SAML_LOGIN_RESPONSE);
+        AssertionType assertion = (AssertionType) context.getContextData().get(SAMLEndpoint.SAML_ASSERTION);
         SubjectType subject = assertion.getSubject();
         SubjectType.STSubType subType = subject.getSubType();
         if (subType != null) {
             NameIDType subjectNameID = (NameIDType) subType.getBaseID();
             authSession.setUserSessionNote(SAMLEndpoint.SAML_FEDERATED_SUBJECT_NAMEID, subjectNameID.serializeAsString());
         }
-        AuthnStatementType authn =  (AuthnStatementType)context.getContextData().get(SAMLEndpoint.SAML_AUTHN_STATEMENT);
+        AuthnStatementType authn = (AuthnStatementType) context.getContextData().get(SAMLEndpoint.SAML_AUTHN_STATEMENT);
         if (authn != null && authn.getSessionIndex() != null) {
             authSession.setUserSessionNote(SAMLEndpoint.SAML_FEDERATED_SESSION_INDEX, authn.getSessionIndex());
 
@@ -264,7 +247,8 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
     @Override
     public void backchannelLogout(KeycloakSession session, UserSessionModel userSession, UriInfo uriInfo, RealmModel realm) {
         String singleLogoutServiceUrl = getConfig().getSingleLogoutServiceUrl();
-        if (singleLogoutServiceUrl == null || singleLogoutServiceUrl.trim().equals("") || !getConfig().isBackchannelSupported()) return;
+        if (singleLogoutServiceUrl == null || singleLogoutServiceUrl.trim().equals("") || !getConfig().isBackchannelSupported())
+            return;
         JaxrsSAML2BindingBuilder binding = buildLogoutBinding(session, userSession, realm);
         try {
             LogoutRequestType logoutRequest = buildLogoutRequest(userSession, uriInfo, realm, singleLogoutServiceUrl);
@@ -274,7 +258,7 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
             int status = SimpleHttp.doPost(singleLogoutServiceUrl, session)
                     .param(GeneralConstants.SAML_REQUEST_KEY, binding.postBinding(SAML2Request.convert(logoutRequest)).encoded())
                     .param(GeneralConstants.RELAY_STATE, userSession.getId()).asStatus();
-            boolean success = status >=200 && status < 400;
+            boolean success = status >= 200 && status < 400;
             if (!success) {
                 logger.warn("Failed saml backchannel broker logout to: " + singleLogoutServiceUrl);
             }
@@ -282,6 +266,51 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
             logger.warn("Failed saml backchannel broker logout to: " + singleLogoutServiceUrl, e);
         }
 
+    }
+
+    public SAMLDocumentHolder resolveArtifact(KeycloakSession session, UriInfo uriInfo, RealmModel realm, String relayState, String samlArt) {
+        //get the URL of the artifact resolution service provided by the Identity Provider
+        String artifactResolutionServiceUrl = getConfig().getArtifactResolutionServiceUrl();
+        if (artifactResolutionServiceUrl == null || artifactResolutionServiceUrl.trim().isEmpty()) {
+            // TODO : use keycloak assertion to throw the INTERNAL_SERVER_ERROR
+            // return ErrorPage.error(session, null, Response.Status.INTERNAL_SERVER_ERROR, Messages.INTERNAL_SERVER_ERROR);
+            throw new RuntimeException("Failed saml backchannel artifact resolve to: " + artifactResolutionServiceUrl);
+        }
+        try {
+            // create the SAML Request object to resolve an artifact
+            ArtifactResolveType artifactResolveRequest = buildArtifactResolveRequest(uriInfo, realm, artifactResolutionServiceUrl, samlArt);
+            if (artifactResolveRequest.getDestination() != null) {
+                artifactResolutionServiceUrl = artifactResolveRequest.getDestination().toString();
+            }
+
+            // convert the SAML Request object to a SAML Document (DOM)
+            Document artifactResolveRequestAsDoc = SAML2Request.convert(artifactResolveRequest);
+            logger.info(String.format("samlRequestAsDoc %s", DocumentUtil.getDocumentAsString(artifactResolveRequestAsDoc)));
+
+            // convert the SAML Document (DOM) to a SOAP Document (DOM)
+            Document soapRequestAsDoc = buildArtifactResolveBinding(session, relayState, realm)
+                    .soapBinding(artifactResolveRequestAsDoc).getDocument();
+
+            // execute the SOAP request
+            SOAPMessage soapResponse = Soap.createMessage()
+                    .addMimeHeader("SOAPAction", "http://www.oasis-open.org/committees/security") // MAY in SOAP binding spec
+                    .addToBody(soapRequestAsDoc)
+                    .call(artifactResolutionServiceUrl, session);
+
+            // extract the SAML Response (DOM) from the SOAP response
+            Document artifactResolveResponseAsDoc = Soap.extractSoapMessage(soapResponse);
+            logger.info(String.format("artifactResolveResponseAsDoc %s", DocumentUtil.getDocumentAsString(artifactResolveResponseAsDoc)));
+
+            // convert the SAML Response (DOM) to a SAML Response object
+            SAMLDocumentHolder artifactResolveResponse = SAML2Response.getSAML2ObjectFromDocument(artifactResolveResponseAsDoc);
+
+            return artifactResolveResponse;
+        } catch (SOAPException |ConfigurationException | ProcessingException | ParsingException e) {
+            logger.warn("Failed saml backchannel artifact resolve to: " + artifactResolutionServiceUrl, e);
+            // TODO : use keycloak assertion to throw the INTERNAL_SERVER_ERROR
+            // return ErrorPage.error(session, null, Response.Status.INTERNAL_SERVER_ERROR, Messages.ARTIFACT_RESOLUTION_SERVICE_ERROR);
+            throw new RuntimeException("Failed saml backchannel artifact resolve to: " + artifactResolutionServiceUrl);
+        }
     }
 
     @Override
@@ -292,7 +321,7 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
         if (getConfig().isBackchannelSupported()) {
             backchannelLogout(session, userSession, uriInfo, realm);
             return null;
-       } else {
+        } else {
             try {
                 LogoutRequestType logoutRequest = buildLogoutRequest(userSession, uriInfo, realm, singleLogoutServiceUrl);
                 if (logoutRequest.getDestination() != null) {
@@ -321,11 +350,24 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
         for (NodeGenerator extension : extensions) {
             logoutBuilder.addExtension(extension);
         }
-        for (Iterator<SamlAuthenticationPreprocessor> it = SamlSessionUtils.getSamlAuthenticationPreprocessorIterator(session); it.hasNext();) {
+        for (Iterator<SamlAuthenticationPreprocessor> it = SamlSessionUtils.getSamlAuthenticationPreprocessorIterator(session); it.hasNext(); ) {
             logoutRequest = it.next().beforeSendingLogoutRequest(logoutRequest, userSession, null);
         }
         return logoutRequest;
     }
+
+    protected ArtifactResolveType buildArtifactResolveRequest(UriInfo uriInfo, RealmModel realm, String artifactServiceUrl, String artifact, NodeGenerator... extensions) throws ConfigurationException {
+        SAML2ArtifactResolveRequestBuilder artifactResolveRequestBuilder = new SAML2ArtifactResolveRequestBuilder()
+                .issuer(getEntityId(uriInfo, realm))
+                // .destination(artifactServiceUrl)
+                .artifact(artifact);
+        ArtifactResolveType artifactResolveRequest = artifactResolveRequestBuilder.createArtifactResolveRequest();
+        for (NodeGenerator extension : extensions) {
+            artifactResolveRequestBuilder.addExtension(extension);
+        }
+        return artifactResolveRequest;
+    }
+
 
     private JaxrsSAML2BindingBuilder buildLogoutBinding(KeycloakSession session, UserSessionModel userSession, RealmModel realm) {
         JaxrsSAML2BindingBuilder binding = new JaxrsSAML2BindingBuilder(session)
@@ -340,10 +382,21 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
         return binding;
     }
 
+    private JaxrsSAML2BindingBuilder buildArtifactResolveBinding(KeycloakSession session, String relayState, RealmModel realm) {
+        JaxrsSAML2BindingBuilder binding = new JaxrsSAML2BindingBuilder(session).relayState(relayState);
+        if (getConfig().isWantAuthnRequestsSigned()) {
+            KeyManager.ActiveRsaKey keys = session.keys().getActiveRsaKey(realm);
+            String keyName = getConfig().getXmlSigKeyInfoKeyNameTransformer().getKeyName(keys.getKid(), keys.getCertificate());
+            binding.signWith(keyName, keys.getPrivateKey(), keys.getPublicKey(), keys.getCertificate())
+                    .signatureAlgorithm(getSignatureAlgorithm())
+                    .signDocument();
+        }
+        return binding;
+    }
+
     @Override
     public Response export(UriInfo uriInfo, RealmModel realm, String format) {
-        try
-        {
+        try {
             URI authnResponseBinding = JBossSAMLURIConstants.SAML_HTTP_REDIRECT_BINDING.getUri();
 
             if (getConfig().isPostBindingAuthnRequest()) {
@@ -355,6 +408,13 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
             if (getConfig().isPostBindingLogout()) {
                 logoutBinding = JBossSAMLURIConstants.SAML_HTTP_POST_BINDING.getUri();
             }
+
+            URI artifactResponseBinding = null;
+
+            if (getConfig().isArtifactBindingResponse()) {
+                artifactResponseBinding = JBossSAMLURIConstants.SAML_HTTP_ARTIFACT_BINDING.getUri();
+            }
+
             URI endpoint = uriInfo.getBaseUriBuilder()
                     .path("realms").path(realm.getName())
                     .path("broker")
@@ -412,25 +472,25 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
             SAMLMetadataWriter metadataWriter = new SAMLMetadataWriter(writer);
 
             EntityDescriptorType entityDescriptor = SPMetadataDescriptor.buildSPDescriptor(
-                authnResponseBinding, logoutBinding, endpoint, endpoint,
-                wantAuthnRequestsSigned, wantAssertionsSigned, wantAssertionsEncrypted,
-                entityId, nameIDPolicyFormat, signingKeys, encryptionKeys);
+                    authnResponseBinding, artifactResponseBinding, logoutBinding, endpoint, endpoint,
+                    wantAuthnRequestsSigned, wantAssertionsSigned, wantAssertionsEncrypted,
+                    entityId, nameIDPolicyFormat, signingKeys, encryptionKeys);
 
             // Create the AttributeConsumingService if at least one attribute importer mapper exists
             List<Entry<IdentityProviderMapperModel, SamlMetadataDescriptorUpdater>> metadataAttrProviders = new ArrayList<>();
             realm.getIdentityProviderMappersByAliasStream(getConfig().getAlias())
-                .forEach(mapper -> {
-                    IdentityProviderMapper target = (IdentityProviderMapper) session.getKeycloakSessionFactory().getProviderFactory(IdentityProviderMapper.class, mapper.getIdentityProviderMapper());
-                    if (target instanceof SamlMetadataDescriptorUpdater)
-                        metadataAttrProviders.add(new java.util.AbstractMap.SimpleEntry<>(mapper, (SamlMetadataDescriptorUpdater)target));
-                });
-                
+                    .forEach(mapper -> {
+                        IdentityProviderMapper target = (IdentityProviderMapper) session.getKeycloakSessionFactory().getProviderFactory(IdentityProviderMapper.class, mapper.getIdentityProviderMapper());
+                        if (target instanceof SamlMetadataDescriptorUpdater)
+                            metadataAttrProviders.add(new java.util.AbstractMap.SimpleEntry<>(mapper, (SamlMetadataDescriptorUpdater) target));
+                    });
+
             if (!metadataAttrProviders.isEmpty()) {
                 int attributeConsumingServiceIndex = getConfig().getAttributeConsumingServiceIndex() != null ? getConfig().getAttributeConsumingServiceIndex() : 1;
                 String attributeConsumingServiceName = getConfig().getAttributeConsumingServiceName();
                 //default value for attributeConsumingServiceName
                 if (attributeConsumingServiceName == null)
-                    attributeConsumingServiceName = realm.getDisplayName() != null ? realm.getDisplayName() : realm.getName() ;
+                    attributeConsumingServiceName = realm.getDisplayName() != null ? realm.getDisplayName() : realm.getName();
                 AttributeConsumingServiceType attributeConsumingService = new AttributeConsumingServiceType(attributeConsumingServiceIndex);
                 attributeConsumingService.setIsDefault(true);
 
@@ -453,15 +513,14 @@ public class SAMLIdentityProvider extends AbstractIdentityProvider<SAMLIdentityP
                     metadataAttrProvider.updateMetadata(mapper.getKey(), entityDescriptor);
                 });
             }
-    
+
             // Write the metadata and export it to a string
             metadataWriter.writeEntityDescriptor(entityDescriptor);
 
             String descriptor = sw.toString();
 
             // Metadata signing
-            if (getConfig().isSignSpMetadata())
-            {
+            if (getConfig().isSignSpMetadata()) {
                 KeyManager.ActiveRsaKey activeKey = session.keys().getActiveRsaKey(realm);
                 X509Certificate certificate = activeKey.getCertificate();
                 String keyName = getConfig().getXmlSigKeyInfoKeyNameTransformer().getKeyName(activeKey.getKid(), certificate);

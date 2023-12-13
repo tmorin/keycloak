@@ -21,11 +21,11 @@ import static org.keycloak.common.util.UriUtils.checkUrl;
 import org.keycloak.common.enums.SslRequired;
 import org.keycloak.dom.saml.v2.protocol.AuthnContextComparisonType;
 import org.keycloak.models.IdentityProviderModel;
-import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.protocol.saml.SamlPrincipalType;
 import org.keycloak.saml.common.constants.JBossSAMLURIConstants;
 import org.keycloak.saml.common.util.XmlKeyInfoKeyNameTransformer;
+import org.keycloak.utils.StringUtil;
 
 /**
  * @author Pedro Igor
@@ -44,11 +44,13 @@ public class SAMLIdentityProviderConfig extends IdentityProviderModel {
     public static final String POST_BINDING_AUTHN_REQUEST = "postBindingAuthnRequest";
     public static final String POST_BINDING_LOGOUT = "postBindingLogout";
     public static final String POST_BINDING_RESPONSE = "postBindingResponse";
+    public static final String ARTIFACT_BINDING_RESPONSE = "artifactBindingResponse";
     public static final String SIGNATURE_ALGORITHM = "signatureAlgorithm";
     public static final String ENCRYPTION_ALGORITHM = "encryptionAlgorithm";
     public static final String SIGNING_CERTIFICATE_KEY = "signingCertificate";
     public static final String SINGLE_LOGOUT_SERVICE_URL = "singleLogoutServiceUrl";
     public static final String SINGLE_SIGN_ON_SERVICE_URL = "singleSignOnServiceUrl";
+    public static final String ARTIFACT_RESOLUTION_SERVICE_URL = "artifactResolutionServiceUrl";
     public static final String VALIDATE_SIGNATURE = "validateSignature";
     public static final String PRINCIPAL_TYPE = "principalType";
     public static final String PRINCIPAL_ATTRIBUTE = "principalAttribute";
@@ -94,6 +96,14 @@ public class SAMLIdentityProviderConfig extends IdentityProviderModel {
 
     public void setSingleSignOnServiceUrl(String singleSignOnServiceUrl) {
         getConfig().put(SINGLE_SIGN_ON_SERVICE_URL, singleSignOnServiceUrl);
+    }
+
+    public String getArtifactResolutionServiceUrl() {
+        return getConfig().get(ARTIFACT_RESOLUTION_SERVICE_URL);
+    }
+
+    public void setArtifactResolutionServiceUrl(String artifactResolutionServiceUrl) {
+        getConfig().put(ARTIFACT_RESOLUTION_SERVICE_URL, artifactResolutionServiceUrl);
     }
 
     public String getSingleLogoutServiceUrl() {
@@ -227,6 +237,14 @@ public class SAMLIdentityProviderConfig extends IdentityProviderModel {
 
     public void setPostBindingAuthnRequest(boolean postBindingAuthnRequest) {
         getConfig().put(POST_BINDING_AUTHN_REQUEST, String.valueOf(postBindingAuthnRequest));
+    }
+
+    public boolean isArtifactBindingResponse() {
+        return Boolean.parseBoolean(getConfig().get(ARTIFACT_BINDING_RESPONSE));
+    }
+
+    public void setArtifactBindingResponse(boolean artifactBindingResponse) {
+        getConfig().put(ARTIFACT_BINDING_RESPONSE, String.valueOf(artifactBindingResponse));
     }
 
     public boolean isPostBindingResponse() {
@@ -403,6 +421,9 @@ public class SAMLIdentityProviderConfig extends IdentityProviderModel {
 
         checkUrl(sslRequired, getSingleLogoutServiceUrl(), SINGLE_LOGOUT_SERVICE_URL);
         checkUrl(sslRequired, getSingleSignOnServiceUrl(), SINGLE_SIGN_ON_SERVICE_URL);
+        if (StringUtil.isNotBlank(getArtifactResolutionServiceUrl())) {
+            checkUrl(sslRequired, getArtifactResolutionServiceUrl(), ARTIFACT_RESOLUTION_SERVICE_URL);
+        }
         //transient name id format is not accepted together with principaltype SubjectnameId
         if (JBossSAMLURIConstants.NAMEID_FORMAT_TRANSIENT.get().equals(getNameIDPolicyFormat()) && SamlPrincipalType.SUBJECT == getPrincipalType())
             throw new IllegalArgumentException("Can not have Transient NameID Policy Format together with SUBJECT Principal Type");

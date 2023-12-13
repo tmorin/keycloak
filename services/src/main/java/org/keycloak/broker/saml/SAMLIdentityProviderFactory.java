@@ -26,7 +26,6 @@ import javax.xml.namespace.QName;
 
 import org.keycloak.Config.Scope;
 import org.keycloak.broker.provider.AbstractIdentityProviderFactory;
-import org.keycloak.common.util.Time;
 import org.keycloak.dom.saml.v2.assertion.AttributeType;
 import org.keycloak.dom.saml.v2.metadata.EndpointType;
 import org.keycloak.dom.saml.v2.metadata.EntitiesDescriptorType;
@@ -123,15 +122,26 @@ public class SAMLIdentityProviderFactory extends AbstractIdentityProviderFactory
                         }
 
                     }
+                    String artifactResolutionServiceUrl = null;
+                    boolean artifactBindingResponse = false;
+                    for (EndpointType endpoint : idpDescriptor.getArtifactResolutionService()) {
+                        if (endpoint.getBinding().toString().equals(JBossSAMLURIConstants.SAML_SOAP_BINDING.get())) {
+                            artifactResolutionServiceUrl = endpoint.getLocation().toString();
+                            artifactBindingResponse = true;
+                            break;
+                        }
+                    }
                     samlIdentityProviderConfig.setIdpEntityId(entityType.getEntityID());
                     samlIdentityProviderConfig.setSingleLogoutServiceUrl(singleLogoutServiceUrl);
                     samlIdentityProviderConfig.setSingleSignOnServiceUrl(singleSignOnServiceUrl);
+                    samlIdentityProviderConfig.setArtifactResolutionServiceUrl(artifactResolutionServiceUrl);
                     samlIdentityProviderConfig.setWantAuthnRequestsSigned(idpDescriptor.isWantAuthnRequestsSigned());
                     samlIdentityProviderConfig.setAddExtensionsElementWithKeyInfo(false);
                     samlIdentityProviderConfig.setValidateSignature(idpDescriptor.isWantAuthnRequestsSigned());
                     samlIdentityProviderConfig.setPostBindingResponse(postBindingResponse);
                     samlIdentityProviderConfig.setPostBindingAuthnRequest(postBindingResponse);
                     samlIdentityProviderConfig.setPostBindingLogout(postBindingLogout);
+                    samlIdentityProviderConfig.setArtifactBindingResponse(artifactBindingResponse);
                     samlIdentityProviderConfig.setLoginHint(false);
 
                     List<String> nameIdFormatList = idpDescriptor.getNameIDFormat();
@@ -167,13 +177,13 @@ public class SAMLIdentityProviderFactory extends AbstractIdentityProviderFactory
                     }
 
                     samlIdentityProviderConfig.setEnabledFromMetadata(entityType.getValidUntil() == null
-                        || entityType.getValidUntil().toGregorianCalendar().getTime().after(new Date(System.currentTimeMillis())));
+                            || entityType.getValidUntil().toGregorianCalendar().getTime().after(new Date(System.currentTimeMillis())));
 
                     // check for hide on login attribute
                     if (entityType.getExtensions() != null && entityType.getExtensions().getEntityAttributes() != null) {
                         for (AttributeType attribute : entityType.getExtensions().getEntityAttributes().getAttribute()) {
                             if (MACEDIR_ENTITY_CATEGORY.equals(attribute.getName())
-                                && attribute.getAttributeValue().contains(REFEDS_HIDE_FROM_DISCOVERY)) {
+                                    && attribute.getAttributeValue().contains(REFEDS_HIDE_FROM_DISCOVERY)) {
                                 samlIdentityProviderConfig.setHideOnLogin(true);
                             }
                         }
