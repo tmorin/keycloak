@@ -44,7 +44,7 @@ import static org.keycloak.saml.common.constants.JBossSAMLURIConstants.PROTOCOL_
  */
 public class SPMetadataDescriptor {
 
-    public static EntityDescriptorType buildSPDescriptor(URI loginBinding, URI logoutBinding, URI assertionEndpoint, URI logoutEndpoint,
+    public static EntityDescriptorType buildSPDescriptor(URI loginBinding, URI artifactBinding, URI logoutBinding, URI assertionEndpoint, URI logoutEndpoint,
                                                          boolean wantAuthnRequestsSigned, boolean wantAssertionsSigned, boolean wantAssertionsEncrypted,
                                                          String entityId, String nameIDPolicyFormat, List<KeyDescriptorType> signingCerts, List<KeyDescriptorType> encryptionCerts)
     {
@@ -73,6 +73,13 @@ public class SPMetadataDescriptor {
         assertionConsumerEndpoint.setIsDefault(true);
         assertionConsumerEndpoint.setIndex(1);
         spSSODescriptor.addAssertionConsumerService(assertionConsumerEndpoint);
+
+        if (artifactBinding != null) {
+            IndexedEndpointType artifactEndpoint = new IndexedEndpointType(artifactBinding, assertionEndpoint);
+            artifactEndpoint.setIsDefault(false);
+            artifactEndpoint.setIndex(2);
+            spSSODescriptor.addAssertionConsumerService(artifactEndpoint);
+        }
 
         entityDescriptor.addChoiceType(new EntityDescriptorType.EDTChoiceType(Arrays.asList(new EntityDescriptorType.EDTDescriptorChoiceType(spSSODescriptor))));
 

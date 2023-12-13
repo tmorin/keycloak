@@ -16,6 +16,7 @@
  */
 package org.keycloak.protocol.saml.preprocessor;
 
+import org.keycloak.dom.saml.v2.protocol.ArtifactResolveType;
 import org.keycloak.dom.saml.v2.protocol.AuthnRequestType;
 import org.keycloak.dom.saml.v2.protocol.LogoutRequestType;
 import org.keycloak.dom.saml.v2.protocol.StatusResponseType;

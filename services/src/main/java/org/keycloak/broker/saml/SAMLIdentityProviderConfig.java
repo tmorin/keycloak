@@ -44,11 +44,13 @@ public class SAMLIdentityProviderConfig extends IdentityProviderModel {
     public static final String POST_BINDING_AUTHN_REQUEST = "postBindingAuthnRequest";
     public static final String POST_BINDING_LOGOUT = "postBindingLogout";
     public static final String POST_BINDING_RESPONSE = "postBindingResponse";
+    public static final String ARTIFACT_BINDING_RESPONSE = "artifactBindingResponse";
     public static final String SIGNATURE_ALGORITHM = "signatureAlgorithm";
     public static final String ENCRYPTION_ALGORITHM = "encryptionAlgorithm";
     public static final String SIGNING_CERTIFICATE_KEY = "signingCertificate";
     public static final String SINGLE_LOGOUT_SERVICE_URL = "singleLogoutServiceUrl";
     public static final String SINGLE_SIGN_ON_SERVICE_URL = "singleSignOnServiceUrl";
+    public static final String ARTIFACT_SERVICE_URL = "artifactServiceUrl";
     public static final String VALIDATE_SIGNATURE = "validateSignature";
     public static final String PRINCIPAL_TYPE = "principalType";
     public static final String PRINCIPAL_ATTRIBUTE = "principalAttribute";
@@ -95,6 +97,14 @@ public class SAMLIdentityProviderConfig extends IdentityProviderModel {
 
     public void setSingleSignOnServiceUrl(String singleSignOnServiceUrl) {
         getConfig().put(SINGLE_SIGN_ON_SERVICE_URL, singleSignOnServiceUrl);
+    }
+
+    public String getArtifactServiceUrl() {
+        return getConfig().get(ARTIFACT_SERVICE_URL);
+    }
+
+    public void setArtifactServiceUrl(String artifactServiceUrl) {
+        getConfig().put(ARTIFACT_SERVICE_URL, artifactServiceUrl);
     }
 
     public String getSingleLogoutServiceUrl() {
@@ -228,6 +238,14 @@ public class SAMLIdentityProviderConfig extends IdentityProviderModel {
 
     public void setPostBindingAuthnRequest(boolean postBindingAuthnRequest) {
         getConfig().put(POST_BINDING_AUTHN_REQUEST, String.valueOf(postBindingAuthnRequest));
+    }
+
+    public boolean isArtifactBindingResponse() {
+        return Boolean.parseBoolean(getConfig().get(ARTIFACT_BINDING_RESPONSE));
+    }
+
+    public void setArtifactBindingResponse(boolean artifactBindingResponse) {
+        getConfig().put(ARTIFACT_BINDING_RESPONSE, String.valueOf(artifactBindingResponse));
     }
 
     public boolean isPostBindingResponse() {
@@ -416,6 +434,9 @@ public class SAMLIdentityProviderConfig extends IdentityProviderModel {
 
         checkUrl(sslRequired, getSingleLogoutServiceUrl(), SINGLE_LOGOUT_SERVICE_URL);
         checkUrl(sslRequired, getSingleSignOnServiceUrl(), SINGLE_SIGN_ON_SERVICE_URL);
+        if (StringUtil.isNotBlank(getArtifactServiceUrl())) {
+            checkUrl(sslRequired, getArtifactServiceUrl(), ARTIFACT_SERVICE_URL);
+        }
         if (StringUtil.isNotBlank(getMetadataDescriptorUrl())) {
             checkUrl(sslRequired, getMetadataDescriptorUrl(), METADATA_DESCRIPTOR_URL);
         }

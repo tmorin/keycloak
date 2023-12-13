@@ -77,8 +77,11 @@ public class SAMLIdentityProviderFactory extends AbstractIdentityProviderFactory
             if (idpDescriptor != null) {
                 SAMLIdentityProviderConfig samlIdentityProviderConfig = new SAMLIdentityProviderConfig();
                 String singleSignOnServiceUrl = null;
+                String artifactServiceUrl = null;
+                boolean artifactBindingResponse = false;
                 boolean postBindingResponse = false;
                 boolean postBindingLogout = false;
+                // TODO add the handling of the Artifact Resolve endpoint
                 for (EndpointType endpoint : idpDescriptor.getSingleSignOnService()) {
                     if (endpoint.getBinding().toString().equals(JBossSAMLURIConstants.SAML_HTTP_POST_BINDING.get())) {
                         singleSignOnServiceUrl = endpoint.getLocation().toString();
@@ -103,9 +106,11 @@ public class SAMLIdentityProviderFactory extends AbstractIdentityProviderFactory
                 samlIdentityProviderConfig.setIdpEntityId(entityType.getEntityID());
                 samlIdentityProviderConfig.setSingleLogoutServiceUrl(singleLogoutServiceUrl);
                 samlIdentityProviderConfig.setSingleSignOnServiceUrl(singleSignOnServiceUrl);
+                samlIdentityProviderConfig.setArtifactServiceUrl(artifactServiceUrl);
                 samlIdentityProviderConfig.setWantAuthnRequestsSigned(idpDescriptor.isWantAuthnRequestsSigned());
                 samlIdentityProviderConfig.setAddExtensionsElementWithKeyInfo(false);
                 samlIdentityProviderConfig.setValidateSignature(idpDescriptor.isWantAuthnRequestsSigned());
+                samlIdentityProviderConfig.setArtifactBindingResponse(artifactBindingResponse);
                 samlIdentityProviderConfig.setPostBindingResponse(postBindingResponse);
                 samlIdentityProviderConfig.setPostBindingAuthnRequest(postBindingResponse);
                 samlIdentityProviderConfig.setPostBindingLogout(postBindingLogout);

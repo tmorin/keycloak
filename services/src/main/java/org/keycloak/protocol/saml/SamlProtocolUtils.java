@@ -30,12 +30,7 @@ import org.keycloak.common.VerificationException;
 import org.keycloak.common.util.PemUtils;
 import org.keycloak.dom.saml.v2.SAML2Object;
 import org.keycloak.dom.saml.v2.assertion.NameIDType;
-import org.keycloak.dom.saml.v2.protocol.ArtifactResponseType;
-import org.keycloak.dom.saml.v2.protocol.ExtensionsType;
-import org.keycloak.dom.saml.v2.protocol.RequestAbstractType;
-import org.keycloak.dom.saml.v2.protocol.StatusCodeType;
-import org.keycloak.dom.saml.v2.protocol.StatusResponseType;
-import org.keycloak.dom.saml.v2.protocol.StatusType;
+import org.keycloak.dom.saml.v2.protocol.*;
 import org.keycloak.models.ClientModel;
 import org.keycloak.rotation.HardcodedKeyLocator;
 import org.keycloak.rotation.KeyLocator;
@@ -52,6 +47,7 @@ import org.keycloak.saml.processing.api.saml.v2.sig.SAML2Signature;
 import org.keycloak.saml.processing.core.saml.v2.common.IDGenerator;
 import org.keycloak.saml.processing.core.saml.v2.common.SAMLDocumentHolder;
 import org.keycloak.saml.processing.core.saml.v2.util.XMLTimeUtil;
+import org.keycloak.saml.processing.core.saml.v2.writers.SAMLRequestWriter;
 import org.keycloak.saml.processing.core.saml.v2.writers.SAMLResponseWriter;
 import org.keycloak.saml.processing.core.util.KeycloakKeySamlExtensionGenerator;
 import org.keycloak.saml.processing.core.util.RedirectBindingSignatureUtil;
@@ -279,6 +275,24 @@ public class SamlProtocolUtils {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         SAMLResponseWriter writer = new SAMLResponseWriter(StaxUtil.getXMLStreamWriter(bos));
         writer.write(responseType);
+        return DocumentUtil.getDocument(new ByteArrayInputStream(bos.toByteArray()));
+    }
+
+    /**
+     * Convert a SAML2 ArtifactResolve into a Document
+     * @param artifactResolve an ArtifactResolve
+     *
+     * @return an artifact response converted to a Document
+     *
+     * @throws ParsingException
+     * @throws ConfigurationException
+     * @throws ProcessingException
+     */
+    public static Document convert(ArtifactResolveType artifactResolve) throws ProcessingException, ConfigurationException,
+            ParsingException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        SAMLRequestWriter writer = new SAMLRequestWriter(StaxUtil.getXMLStreamWriter(bos));
+        writer.write(artifactResolve);
         return DocumentUtil.getDocument(new ByteArrayInputStream(bos.toByteArray()));
     }
 }

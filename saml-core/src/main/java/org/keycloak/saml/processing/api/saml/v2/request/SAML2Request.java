@@ -18,11 +18,7 @@ package org.keycloak.saml.processing.api.saml.v2.request;
 
 import org.keycloak.dom.saml.v2.SAML2Object;
 import org.keycloak.dom.saml.v2.assertion.NameIDType;
-import org.keycloak.dom.saml.v2.protocol.AuthnRequestType;
-import org.keycloak.dom.saml.v2.protocol.LogoutRequestType;
-import org.keycloak.dom.saml.v2.protocol.NameIDPolicyType;
-import org.keycloak.dom.saml.v2.protocol.RequestAbstractType;
-import org.keycloak.dom.saml.v2.protocol.ResponseType;
+import org.keycloak.dom.saml.v2.protocol.*;
 import org.keycloak.saml.common.PicketLinkLogger;
 import org.keycloak.saml.common.PicketLinkLoggerFactory;
 import org.keycloak.saml.common.constants.GeneralConstants;
@@ -276,6 +272,23 @@ public class SAML2Request {
     }
 
     /**
+     * Create a Artifact Resolve Request
+     *
+     * @param issuer
+     *
+     * @return
+     *
+     * @throws ConfigurationException
+     */
+    public static ArtifactResolveType createArtifactResolveRequest(NameIDType issuer) throws ConfigurationException {
+        ArtifactResolveType lrt = new ArtifactResolveType(IDGenerator.create("ID_"), XMLTimeUtil.getIssueInstant());
+
+        lrt.setIssuer(issuer);
+
+        return lrt;
+    }
+
+    /**
      * Return the DOM object
      *
      * @param rat
@@ -294,6 +307,8 @@ public class SAML2Request {
             writer.write((AuthnRequestType) rat);
         } else if (rat instanceof LogoutRequestType) {
             writer.write((LogoutRequestType) rat);
+        } else if (rat instanceof ArtifactResolveType) {
+            writer.write((ArtifactResolveType) rat);
         }
 
         return DocumentUtil.getDocument(new String(bos.toByteArray(), GeneralConstants.SAML_CHARSET));
